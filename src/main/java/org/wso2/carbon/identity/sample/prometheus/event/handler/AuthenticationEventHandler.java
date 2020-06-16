@@ -18,16 +18,21 @@ public class AuthenticationEventHandler extends AbstractEventHandler {
     private static final Log LOG = LogFactory.getLog(AuthenticationEventHandler.class);
     public static final String HANDLER_NAME = "prometheus-auth-handler";
     public static final String VALUE_NOT_AVAILABLE = "Not Available";
-    public static final String AUTH_SUCCESS = "success";
-    public static final String AUTH_FAILURE = "failure";
 
-    private Counter loginCounter;
+    private Counter loginSuccessCounter;
+    private Counter loginFailureCounter;
 
     public void initCounter() {
-        loginCounter = Counter.build()
-                .name("wso2is_login")
-                .help("Login stats from WSO2 Identity Server")
-                .labelNames("username", "tenant", "service_provider", "result")
+
+        loginSuccessCounter = Counter.build()
+                .name("login_success_total")
+                .help("Successful logins from WSO2 Identity Server")
+                .labelNames("username", "tenant", "application")
+                .register();
+        loginFailureCounter = Counter.build()
+                .name("login_failure_total")
+                .help("Failed logins from WSO2 Identity Server")
+                .labelNames("username", "tenant", "application")
                 .register();
     }
 
@@ -41,29 +46,18 @@ public class AuthenticationEventHandler extends AbstractEventHandler {
 
         if (IdentityEventConstants.EventName.AUTHENTICATION_STEP_FAILURE.name().equals(event.getEventName()) ||
                 IdentityEventConstants.EventName.AUTHENTICATION_FAILURE.name().equals(event.getEventName())) {
-            countAuthFailure(event);
+            countAuthEvent(event, loginFailureCounter);
             return;
         }
 
         if (IdentityEventConstants.EventName.AUTHENTICATION_SUCCESS.name().equals(event.getEventName())) {
-            countAuthSuccess(event);
+            countAuthEvent(event, loginSuccessCounter);
             return;
         }
-
         LOG.warn("Event " + event.getEventName() + " can't be handled by " + HANDLER_NAME + ". Hence ignoring..");
     }
 
-    private void countAuthSuccess(Event event) {
-
-        countAuthEvent(event, AUTH_SUCCESS);
-    }
-
-    private void countAuthFailure(Event event) {
-
-        countAuthEvent(event, AUTH_FAILURE);
-    }
-
-    private void countAuthEvent(Event event, String outcome) {
+    private void countAuthEvent(Event event, Counter counter) {
 
         Map<String, Object> properties = event.getEventProperties();
         AuthenticationContext context = (AuthenticationContext) properties.get(IdentityEventConstants.EventProperty.
@@ -73,7 +67,7 @@ public class AuthenticationEventHandler extends AbstractEventHandler {
         String username = getUsername(userObj);
         String tenant = getTenant(userObj);
         String serviceProvider = context.getServiceProviderName();
-        loginCounter.labels(username, tenant, serviceProvider, outcome).inc();
+        counter.labels(username, tenant, serviceProvider).inc();
     }
 
     private String getUsername(Object userObj) {
